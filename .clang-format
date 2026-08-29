@@ -1,0 +1,37 @@
+---
+# ai_c_style_and_coding 标准
+# 基于 AhmedAbouelkher/ai_c_style_and_coding 的 C99+ 代码规范
+# https://github.com/AhmedAbouelkher/ai_c_style_and_coding
+
+Language:        Cpp
+BasedOnStyle:    LLVM
+
+# 行宽
+ColumnLimit:     120
+
+# 缩进: 4空格，禁止Tab
+IndentWidth:     4
+UseTab:          Never
+
+# 花括号: 全部同行 (keyword) {   —— if/for/while/switch/函数
+BreakBeforeBraces: WebKit
+
+# 指针/引用: Type* ptr
+PointerAlignment: Left
+
+# 强制单行语句也要花括号 (clang-format 做不到自动添加，但写代码时遵循)
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: None
+
+# 预处理指令缩进
+IndentPPDirectives: BeforeHash
+
+# 排序 include
+SortIncludes:    true
+
+# 空行最多保留1行
+MaxEmptyLinesToKeep: 1
+
+# 赋值/比较运算符两侧留空格 (a = b + c)
+SpaceBeforeAssignmentOperators: true
