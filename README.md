@@ -10,6 +10,11 @@
 
 ## CHANGELOG
 
+### 2026-08-31
+
+#### [./STM32H747/mpu](./STM32H747/mpu)
+- 新增 STM32H747 CM7 MPU 内存保护工程，包含内存区域配置、只读访问保护实验、MemManage Fault 异常处理以及 MPU 与 Cache 学习文档。
+
 ### 2026-08-30 
 
 #### [./STM32H747/template](./STM32H747/template)
