@@ -10,6 +10,13 @@
 
 ## CHANGELOG
 
+### 2026-09-09
+
+#### [./STM32H747/screen](./STM32H747/screen)
+- 新增 STM32H747 KD025EGOIN001 400×712 AMOLED 工程，完成 LTDC、MIPI DSI、DMA2D、FMC SDRAM 及时钟配置。
+- 新增 KD025EGOIN001 屏幕驱动，包含 RM690C0 初始化、SGM3836A 偏压控制、DSI 命令发送、DMA2D 图形绘制和测试画面。
+- 完成单 Lane 600Mbit/s、Burst Mode、18.1875MHz Pixel Clock 配置，并补充 MIPI DSI 原理与 CubeMX 配置文档。
+
 ### 2026-09-01
 
 #### [./STM32H747/sdram](./STM32H747/sdram)
