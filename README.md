@@ -10,6 +10,11 @@
 
 ## CHANGELOG
 
+### 2026-09-10
+
+#### [./STM32H747/screen](./STM32H747/screen)
+- 为 KD025EGOIN001 屏幕新增双缓冲，使用前台缓冲显示、后台缓冲绘制，并在垂直消隐期切换 Framebuffer，减少画面撕裂。
+
 ### 2026-09-09
 
 #### [./STM32H747/screen](./STM32H747/screen)
