@@ -22,12 +22,11 @@ void cm7_main(void)
         Error_Handler();
     }
 
-    if (!kd025egoin001_test()) {
-        log_error("screen test failed");
-        Error_Handler();
-    }
-
     for (;;) {
+        if (!kd025egoin001_test()) {
+            log_error("screen test failed");
+            Error_Handler();
+        }
     }
 }
 */

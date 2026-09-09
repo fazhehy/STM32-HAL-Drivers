@@ -5,10 +5,9 @@
 #include "dsihost.h"
 #include "ltdc.h"
 
-#define KD025EGOIN001_DSI_CHANNEL 0U
-#define KD025EGOIN001_CACHE_LINE_SIZE 32U
-#define KD025EGOIN001_FRAMEBUFFER_SIZE (KD025EGOIN001_WIDTH * KD025EGOIN001_HEIGHT * KD025EGOIN001_PIXEL_BYTES)
-#define SGM3836A_ELVSS_NEGATIVE_2V2_PULSES 33U
+#define KD025EGOIN001_DSI_CHANNEL 0
+#define KD025EGOIN001_PRESENT_TIMEOUT 100
+#define SGM3836A_ELVSS_NEGATIVE_2V2_PULSES 33
 
 static const uint8_t command_fe_page_20[] = {0x20};
 static const uint8_t command_5a_unlock[] = {0x21};
@@ -49,6 +48,9 @@ static const kd025egoin001_command_t initialization_commands[] = {
     {0x51, command_51_brightness, sizeof(command_51_brightness)},
 };
 
+static uint32_t front_buffer_address = KD025EGOIN001_FB_ADDRESS;
+static uint32_t back_buffer_address = KD025EGOIN001_BACK_FB_ADDRESS;
+
 static void enable_bias_power(void)
 {
     uint32_t primask;
@@ -59,7 +61,7 @@ static void enable_bias_power(void)
     primask = __get_PRIMASK();
     __disable_irq();
 
-    for (uint32_t pulse = 0U; pulse < SGM3836A_ELVSS_NEGATIVE_2V2_PULSES; ++pulse) {
+    for (uint32_t pulse = 0; pulse < SGM3836A_ELVSS_NEGATIVE_2V2_PULSES; ++pulse) {
         KD025EGOIN001_BIAS_CTRL_LOW();
         delay_us(10);
         KD025EGOIN001_BIAS_CTRL_HIGH();
@@ -68,22 +70,22 @@ static void enable_bias_power(void)
 
     delay_us(55);
 
-    if (primask == 0U) {
+    if (primask == 0) {
         __enable_irq();
     }
 }
 
 bool kd025egoin001_write_command(uint8_t command, const uint8_t* data, uint16_t data_length)
 {
-    if (data_length == 0U) {
-        return HAL_DSI_ShortWrite(&hdsi, KD025EGOIN001_DSI_CHANNEL, DSI_DCS_SHORT_PKT_WRITE_P0, command, 0U) == HAL_OK;
+    if (data_length == 0) {
+        return HAL_DSI_ShortWrite(&hdsi, KD025EGOIN001_DSI_CHANNEL, DSI_DCS_SHORT_PKT_WRITE_P0, command, 0) == HAL_OK;
     }
 
     if (data == NULL) {
         return false;
     }
 
-    if (data_length == 1U) {
+    if (data_length == 1) {
         return HAL_DSI_ShortWrite(&hdsi, KD025EGOIN001_DSI_CHANNEL, DSI_DCS_SHORT_PKT_WRITE_P1, command, data[0]) ==
                HAL_OK;
     }
@@ -102,7 +104,7 @@ bool kd025egoin001_init(void)
     KD025EGOIN001_POWER_ON();
     delay_ms(100);
 
-    if (!kd025egoin001_clear(KD025EGOIN001_COLOR_BLACK)) {
+    if (!kd025egoin001_clear(KD025EGOIN001_COLOR_BLACK) || !kd025egoin001_present()) {
         return false;
     }
 
@@ -131,7 +133,7 @@ bool kd025egoin001_init(void)
     SET_BIT(hdsi.Instance->VMCR, DSI_VMCR_LPCE);
     delay_ms(10);
 
-    for (uint32_t index = 0U; index < (sizeof(initialization_commands) / sizeof(initialization_commands[0])); ++index) {
+    for (uint32_t index = 0; index < (sizeof(initialization_commands) / sizeof(initialization_commands[0])); ++index) {
         const kd025egoin001_command_t* entry = &initialization_commands[index];
 
         if (!kd025egoin001_write_command(entry->command, entry->data, entry->data_length)) {
@@ -139,12 +141,12 @@ bool kd025egoin001_init(void)
         }
     }
 
-    if (!kd025egoin001_write_command(0x11, NULL, 0U)) {
+    if (!kd025egoin001_write_command(0x11, NULL, 0)) {
         return false;
     }
     delay_ms(120);
 
-    if (!kd025egoin001_write_command(0x29, NULL, 0U)) {
+    if (!kd025egoin001_write_command(0x29, NULL, 0)) {
         return false;
     }
     delay_ms(20);
@@ -155,19 +157,23 @@ bool kd025egoin001_init(void)
 
 bool kd025egoin001_clear(uint32_t color)
 {
-    return kd025egoin001_fill_rect(0U, 0U, KD025EGOIN001_WIDTH, KD025EGOIN001_HEIGHT, color);
+    return kd025egoin001_fill_rect(0, 0, KD025EGOIN001_WIDTH, KD025EGOIN001_HEIGHT, color);
 }
 
 bool kd025egoin001_fill_rect(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint32_t color)
 {
     uint32_t destination;
 
-    if ((width == 0U) || (height == 0U) || (x >= KD025EGOIN001_WIDTH) || (y >= KD025EGOIN001_HEIGHT) ||
-        (((uint32_t)x + width) > KD025EGOIN001_WIDTH) || (((uint32_t)y + height) > KD025EGOIN001_HEIGHT)) {
+    if ((width == 0) || (height == 0) || (x >= KD025EGOIN001_WIDTH) || (y >= KD025EGOIN001_HEIGHT) ||
+        ((x + width) > KD025EGOIN001_WIDTH) || ((y + height) > KD025EGOIN001_HEIGHT)) {
         return false;
     }
 
-    destination = KD025EGOIN001_FB_ADDRESS + ((((uint32_t)y * KD025EGOIN001_WIDTH) + x) * KD025EGOIN001_PIXEL_BYTES);
+    destination = back_buffer_address + (((y * KD025EGOIN001_WIDTH) + x) * KD025EGOIN001_PIXEL_BYTES);
+
+    if ((SCB->CCR & SCB_CCR_DC_Msk) != 0) {
+        SCB_CleanDCache_by_Addr((uint32_t*)back_buffer_address, KD025EGOIN001_FRAMEBUFFER_SIZE);
+    }
 
     hdma2d.Init.Mode = DMA2D_R2M;
     hdma2d.Init.ColorMode = DMA2D_OUTPUT_RGB888;
@@ -179,50 +185,70 @@ bool kd025egoin001_fill_rect(uint16_t x, uint16_t y, uint16_t width, uint16_t he
     if (HAL_DMA2D_Start(&hdma2d, color, destination, width, height) != HAL_OK) {
         return false;
     }
-    if (HAL_DMA2D_PollForTransfer(&hdma2d, 1000U) != HAL_OK) {
+    if (HAL_DMA2D_PollForTransfer(&hdma2d, 1000) != HAL_OK) {
         return false;
     }
 
-    if ((SCB->CCR & SCB_CCR_DC_Msk) != 0U) {
-        SCB_InvalidateDCache_by_Addr((uint32_t*)KD025EGOIN001_FB_ADDRESS, (int32_t)KD025EGOIN001_FRAMEBUFFER_SIZE);
+    if ((SCB->CCR & SCB_CCR_DC_Msk) != 0) {
+        SCB_InvalidateDCache_by_Addr((uint32_t*)back_buffer_address, KD025EGOIN001_FRAMEBUFFER_SIZE);
     }
+    return true;
+}
+
+bool kd025egoin001_present(void)
+{
+    uint32_t start_tick;
+    uint32_t previous_front_buffer_address;
+
+    if ((SCB->CCR & SCB_CCR_DC_Msk) != 0) {
+        SCB_CleanDCache_by_Addr((uint32_t*)back_buffer_address, KD025EGOIN001_FRAMEBUFFER_SIZE);
+    }
+
+    if (HAL_LTDC_SetAddress_NoReload(&hltdc, back_buffer_address, 0) != HAL_OK) {
+        return false;
+    }
+
+    __HAL_LTDC_VERTICAL_BLANKING_RELOAD_CONFIG(&hltdc);
+    start_tick = HAL_GetTick();
+    while ((hltdc.Instance->SRCR & LTDC_SRCR_VBR) != 0) {
+        if ((HAL_GetTick() - start_tick) >= KD025EGOIN001_PRESENT_TIMEOUT) {
+            return false;
+        }
+    }
+
+    previous_front_buffer_address = front_buffer_address;
+    front_buffer_address = back_buffer_address;
+    back_buffer_address = previous_front_buffer_address;
+
     return true;
 }
 
 void kd025egoin001_draw_pixel(uint16_t x, uint16_t y, uint32_t color)
 {
-    volatile uint8_t* const framebuffer = (volatile uint8_t*)KD025EGOIN001_FB_ADDRESS;
+    volatile uint8_t* framebuffer = (volatile uint8_t*)back_buffer_address;
     uint32_t pixel_offset;
 
     if ((x >= KD025EGOIN001_WIDTH) || (y >= KD025EGOIN001_HEIGHT)) {
         return;
     }
 
-    pixel_offset = (((uint32_t)y * KD025EGOIN001_WIDTH) + x) * KD025EGOIN001_PIXEL_BYTES;
-    framebuffer[pixel_offset] = (uint8_t)color;
-    framebuffer[pixel_offset + 1U] = (uint8_t)(color >> 8U);
-    framebuffer[pixel_offset + 2U] = (uint8_t)(color >> 16U);
-
-    if ((SCB->CCR & SCB_CCR_DC_Msk) != 0U) {
-        const uint32_t pixel_address = KD025EGOIN001_FB_ADDRESS + pixel_offset;
-        const uint32_t cache_line_address = pixel_address & ~(KD025EGOIN001_CACHE_LINE_SIZE - 1U);
-
-        SCB_CleanDCache_by_Addr((uint32_t*)cache_line_address, (int32_t)KD025EGOIN001_CACHE_LINE_SIZE);
-    }
+    pixel_offset = ((y * KD025EGOIN001_WIDTH) + x) * KD025EGOIN001_PIXEL_BYTES;
+    framebuffer[pixel_offset] = color;
+    framebuffer[pixel_offset + 1] = color >> 8;
+    framebuffer[pixel_offset + 2] = color >> 16;
 }
 
 uint32_t kd025egoin001_read_pixel(uint16_t x, uint16_t y)
 {
-    volatile const uint8_t* const framebuffer = (volatile const uint8_t*)KD025EGOIN001_FB_ADDRESS;
+    volatile const uint8_t* framebuffer = (volatile const uint8_t*)back_buffer_address;
     uint32_t pixel_offset;
 
     if ((x >= KD025EGOIN001_WIDTH) || (y >= KD025EGOIN001_HEIGHT)) {
-        return 0U;
+        return 0;
     }
 
-    pixel_offset = (((uint32_t)y * KD025EGOIN001_WIDTH) + x) * KD025EGOIN001_PIXEL_BYTES;
-    return ((uint32_t)framebuffer[pixel_offset + 2U] << 16U) | ((uint32_t)framebuffer[pixel_offset + 1U] << 8U) |
-           framebuffer[pixel_offset];
+    pixel_offset = ((y * KD025EGOIN001_WIDTH) + x) * KD025EGOIN001_PIXEL_BYTES;
+    return (framebuffer[pixel_offset + 2] << 16) | (framebuffer[pixel_offset + 1] << 8) | framebuffer[pixel_offset];
 }
 
 void kd025egoin001_draw_line(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint32_t color)
@@ -239,9 +265,9 @@ void kd025egoin001_draw_line(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1,
     int32_t error = delta_x + delta_y;
 
     for (;;) {
-        if ((current_x >= 0) && (current_x < (int32_t)KD025EGOIN001_WIDTH) && (current_y >= 0) &&
-            (current_y < (int32_t)KD025EGOIN001_HEIGHT)) {
-            kd025egoin001_draw_pixel((uint16_t)current_x, (uint16_t)current_y, color);
+        if ((current_x >= 0) && (current_x < KD025EGOIN001_WIDTH) && (current_y >= 0) &&
+            (current_y < KD025EGOIN001_HEIGHT)) {
+            kd025egoin001_draw_pixel(current_x, current_y, color);
         }
 
         if ((current_x == end_x) && (current_y == end_y)) {
@@ -264,15 +290,15 @@ void kd025egoin001_draw_hline(uint16_t x, uint16_t y, uint16_t length, uint32_t 
 {
     uint16_t clipped_length;
 
-    if ((length == 0U) || (x >= KD025EGOIN001_WIDTH) || (y >= KD025EGOIN001_HEIGHT)) {
+    if ((length == 0) || (x >= KD025EGOIN001_WIDTH) || (y >= KD025EGOIN001_HEIGHT)) {
         return;
     }
 
     clipped_length = length;
-    if (((uint32_t)x + clipped_length) > KD025EGOIN001_WIDTH) {
-        clipped_length = (uint16_t)(KD025EGOIN001_WIDTH - x);
+    if ((x + clipped_length) > KD025EGOIN001_WIDTH) {
+        clipped_length = KD025EGOIN001_WIDTH - x;
     }
-    (void)kd025egoin001_fill_rect(x, y, clipped_length, 1U, color);
+    (void)kd025egoin001_fill_rect(x, y, clipped_length, 1, color);
 }
 
 void kd025egoin001_draw_rectangle(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint32_t color)
@@ -298,31 +324,31 @@ void kd025egoin001_draw_rectangle(uint16_t x0, uint16_t y0, uint16_t x1, uint16_
 
 static void draw_pixel_clipped(int32_t x, int32_t y, uint32_t color)
 {
-    if ((x >= 0) && (x < (int32_t)KD025EGOIN001_WIDTH) && (y >= 0) && (y < (int32_t)KD025EGOIN001_HEIGHT)) {
-        kd025egoin001_draw_pixel((uint16_t)x, (uint16_t)y, color);
+    if ((x >= 0) && (x < KD025EGOIN001_WIDTH) && (y >= 0) && (y < KD025EGOIN001_HEIGHT)) {
+        kd025egoin001_draw_pixel(x, y, color);
     }
 }
 
 static void draw_span_clipped(int32_t x0, int32_t x1, int32_t y, uint32_t color)
 {
-    if ((y < 0) || (y >= (int32_t)KD025EGOIN001_HEIGHT) || (x1 < 0) || (x0 >= (int32_t)KD025EGOIN001_WIDTH)) {
+    if ((y < 0) || (y >= KD025EGOIN001_HEIGHT) || (x1 < 0) || (x0 >= KD025EGOIN001_WIDTH)) {
         return;
     }
 
     if (x0 < 0) {
         x0 = 0;
     }
-    if (x1 >= (int32_t)KD025EGOIN001_WIDTH) {
-        x1 = (int32_t)KD025EGOIN001_WIDTH - 1;
+    if (x1 >= KD025EGOIN001_WIDTH) {
+        x1 = KD025EGOIN001_WIDTH - 1;
     }
-    (void)kd025egoin001_fill_rect((uint16_t)x0, (uint16_t)y, (uint16_t)(x1 - x0 + 1), 1U, color);
+    (void)kd025egoin001_fill_rect(x0, y, x1 - x0 + 1, 1, color);
 }
 
 void kd025egoin001_draw_circle(uint16_t center_x, uint16_t center_y, uint16_t radius, uint32_t color)
 {
     int32_t x = 0;
     int32_t y = radius;
-    int32_t decision = 1 - (int32_t)radius;
+    int32_t decision = 1 - radius;
     const int32_t center_x_signed = center_x;
     const int32_t center_y_signed = center_y;
 
@@ -350,7 +376,7 @@ void kd025egoin001_fill_circle(uint16_t center_x, uint16_t center_y, uint16_t ra
 {
     int32_t x = 0;
     int32_t y = radius;
-    int32_t decision = 1 - (int32_t)radius;
+    int32_t decision = 1 - radius;
     const int32_t center_x_signed = center_x;
     const int32_t center_y_signed = center_y;
 
@@ -372,29 +398,17 @@ void kd025egoin001_fill_circle(uint16_t center_x, uint16_t center_y, uint16_t ra
 
 bool kd025egoin001_test(void)
 {
-    if (!kd025egoin001_clear(KD025EGOIN001_COLOR_BLACK)) {
-        return false;
-    }
+    const uint32_t colors[] = {
+        KD025EGOIN001_COLOR_BLACK, KD025EGOIN001_COLOR_WHITE,  KD025EGOIN001_COLOR_RED,  KD025EGOIN001_COLOR_GREEN,
+        KD025EGOIN001_COLOR_BLUE,  KD025EGOIN001_COLOR_YELLOW, KD025EGOIN001_COLOR_CYAN, KD025EGOIN001_COLOR_MAGENTA,
+    };
 
-    if (!kd025egoin001_fill_rect(20U, 20U, 110U, 120U, KD025EGOIN001_COLOR_RED) ||
-        !kd025egoin001_fill_rect(145U, 20U, 110U, 120U, KD025EGOIN001_COLOR_GREEN) ||
-        !kd025egoin001_fill_rect(270U, 20U, 110U, 120U, KD025EGOIN001_COLOR_BLUE)) {
-        return false;
+    for (uint32_t index = 0; index < sizeof(colors) / sizeof(colors[0]); ++index) {
+        if (!kd025egoin001_clear(colors[index]) || !kd025egoin001_present()) {
+            return false;
+        }
+        delay_ms(100);
     }
-
-    kd025egoin001_draw_hline(20U, 165U, 360U, KD025EGOIN001_COLOR_YELLOW);
-    kd025egoin001_draw_hline(20U, 175U, 360U, KD025EGOIN001_COLOR_CYAN);
-    kd025egoin001_draw_hline(20U, 185U, 360U, KD025EGOIN001_COLOR_MAGENTA);
-    kd025egoin001_draw_rectangle(0U, 0U, KD025EGOIN001_WIDTH - 1U, KD025EGOIN001_HEIGHT - 1U,
-                                 KD025EGOIN001_COLOR_WHITE);
-    kd025egoin001_draw_rectangle(20U, 220U, 379U, 450U, KD025EGOIN001_COLOR_WHITE);
-    kd025egoin001_draw_line(20U, 220U, 379U, 450U, KD025EGOIN001_COLOR_YELLOW);
-    kd025egoin001_draw_line(379U, 220U, 20U, 450U, KD025EGOIN001_COLOR_CYAN);
-    kd025egoin001_fill_circle(200U, 540U, 70U, KD025EGOIN001_COLOR_BLUE);
-    kd025egoin001_draw_circle(200U, 540U, 70U, KD025EGOIN001_COLOR_WHITE);
-    kd025egoin001_fill_circle(90U, 650U, 35U, KD025EGOIN001_COLOR_MAGENTA);
-    kd025egoin001_fill_circle(310U, 650U, 35U, KD025EGOIN001_COLOR_CYAN);
-    kd025egoin001_draw_pixel(200U, 690U, KD025EGOIN001_COLOR_YELLOW);
 
     return true;
 }

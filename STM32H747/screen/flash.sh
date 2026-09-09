@@ -28,6 +28,8 @@ for path in ("CM7/build/compile_commands.json", "CM4/build/compile_commands.json
 with open("build/Debug/compile_commands.json", "w", encoding="utf-8") as output:
     json.dump(commands, output, indent=2)
 ' 2>/dev/null
+
+    ln -sfn build/Debug/compile_commands.json compile_commands.json
 }
 
 flash_core() {
