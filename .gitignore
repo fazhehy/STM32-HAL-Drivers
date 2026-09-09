@@ -2,3 +2,4 @@ blog/
 build/
 .agents/
 .codex/
+.cache/
