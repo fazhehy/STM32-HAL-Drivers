@@ -10,6 +10,12 @@
 
 ## CHANGELOG
 
+### 2026-10-06
+
+#### [./STM32H747/vcp](./STM32H747/vcp)
+- 新增 STM32H747 USB CDC 虚拟串口工程，使用 `USB_OTG_FS` 的 Device Only 模式，由 CM7 运行 USB Device 协议栈。
+- 配置 PLL1Q 为 USB 提供 48 MHz 时钟，并加入每秒发送 `CM7 USB CDC OK` 的测试代码。
+
 ### 2026-09-10
 
 #### [./STM32H747/screen](./STM32H747/screen)
