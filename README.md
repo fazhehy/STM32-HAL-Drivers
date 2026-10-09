@@ -10,6 +10,13 @@
 
 ## CHANGELOG
 
+### 2026-10-09
+
+#### [./STM32H747/sd_card](./STM32H747/sd_card)
+- 新增 STM32H747 TF 卡工程，由 CM7 使用 SDMMC1 四位总线通信；PLL2R 提供 50 MHz 内核时钟，卡传输时钟配置为 12.5 MHz。
+- 新增基于 HAL 的 SD 卡块读写驱动及 FatFs 适配层，支持通过 FatFs 读写卡上的 FAT 文件系统；当前未启用 exFAT 和长文件名。
+- 在 `cm7_main.cpp` 和 `sd_card_example.c` 中提供文件读写测试：创建未占用的短文件名，写入内容后重新打开并回读校验。
+
 ### 2026-10-06
 
 #### [./STM32H747/vcp](./STM32H747/vcp)
