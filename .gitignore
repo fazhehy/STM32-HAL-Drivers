@@ -4,4 +4,3 @@ build/
 .codex/
 .cache/
 compile_commands.json
-STM32H747/touch/
