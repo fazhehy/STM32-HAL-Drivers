@@ -10,6 +10,13 @@
 
 ## CHANGELOG
 
+### 2026-10-10
+
+#### [./STM32H747/usb_msc](./STM32H747/usb_msc)
+- 新增 STM32H747 USB MSC 读卡器工程，在 sd_card 工程基础上加入 `USB_OTG_FS` 的 Device Only 模式和 Mass Storage Class，由 CM7 运行 USB Device 协议栈，电脑把 SD 卡识别为可移动盘。
+- 新增 BSP 层 USB MSC 驱动，将存储回调接到 SD 卡的裸块读写接口；上电先用 FatFs 做一次文件读写自检，自检完成前用门闸把主机挡在卡外，之后卸载 FatFs，卡完全交给主机。
+- `MSC_MEDIA_PACKET` 保持 512 字节，SD 卡访问沿用轮询方式，未配置 DMA 与 D-Cache。
+
 ### 2026-10-09
 
 #### [./STM32H747/sd_card](./STM32H747/sd_card)
