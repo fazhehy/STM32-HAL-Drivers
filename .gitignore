@@ -2,5 +2,6 @@ blog/
 build/
 .agents/
 .codex/
+.claude/
 .cache/
 compile_commands.json
