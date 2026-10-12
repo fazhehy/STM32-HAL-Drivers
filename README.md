@@ -10,6 +10,15 @@
 
 ## CHANGELOG
 
+### 2026-10-13
+
+#### [./STM32H747/usb_composite](./STM32H747/usb_composite)
+- 新增 STM32H747 USB 复合设备工程，把 CDC 虚拟串口和 MSC 读卡器合到同一个 `USB_OTG_FS` 口上：一条配置挂 3 个接口、5 个端点，电脑上同时出现串口和可移动盘。
+- 复合描述符用 ST 的 CompositeBuilder 手工拼装（CubeMX 生成不出复合设备），MSC 的批量端点让出 `0x81/0x01` 改到 `0x83/0x03`，CDC 的 IAD 由手工定义的 `USBD_COMPOSITE_USE_IAD` 生成。
+- 新增 BSP 层 USB CDC 驱动，接收侧使用 128 字节环形缓冲；回环和每秒一行 `CM7 USB CDC OK` 日志都在主循环里发送，缓冲放不下时 OUT 端点保持 NAK，由主机重发。
+- 两个类分两轮注册（`USBD_RegisterClassComposite` + `USBD_CMPSIT_SetClassID`），`USBD_MAX_NUM_INTERFACES` 改为 3，类句柄分配器由单块静态缓冲改为计数式线性分配；设备 PID 取 `0x5741`，产品名为 `STM32 Composite`。
+- 上述改动都落在 CubeMX 生成区，重新生成会被覆盖。
+
 ### 2026-10-10
 
 #### [./STM32H747/usb_msc](./STM32H747/usb_msc)
