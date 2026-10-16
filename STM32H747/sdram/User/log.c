@@ -41,9 +41,9 @@ void log_printf_output(const char* str, ...)
 
 void log_vofa_justfloat_output(const float* data, uint8_t count)
 {
-    static const uint8_t header[4] = {0x00, 0x00, 0x80, 0x7F};
-    LOG_PRINT(header, sizeof(header));
+    static const uint8_t tail[4] = {0x00, 0x00, 0x80, 0x7F};
     LOG_PRINT((const uint8_t*)data, count * sizeof(float));
+    LOG_PRINT(tail, sizeof(tail));
 }
 
 #endif /* USE_LOG */
